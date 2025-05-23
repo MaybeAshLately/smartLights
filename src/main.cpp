@@ -5,23 +5,27 @@
 #define bluePin 11
 #define pirPin 2
 
+enum State {NORMAL, PHOTO, MOTION, TV, NONE};
+State state;
+
 int redLevel=0;
 int greenLevel=0;
 int blueLevel=0;
 
 int criticalLightLevel=0;
+int brightnessLevel=0;
 
-bool isOn=false;
-bool photoresistorDetectionOn=false;
-bool pirDetectionOn=false;
-bool tvModeOn=false;
+uint8_t messageBuffer[10];
 
 void playTvMode();
 void photoresistorModeOn();
 void lightsOn();
 void lightsOff();
+void handleRecivedMessage();
+void motionOn();
 
 void setup() {
+  randomSeed(analogRead(A0));
   pinMode(redPin,OUTPUT);
   pinMode(greenPin,OUTPUT);
   pinMode(bluePin,OUTPUT);
@@ -36,19 +40,19 @@ void setup() {
 
 void loop() {
 
-  if(isOn)
+  if(state==NORMAL)
   {
     lightsOn();
   }
-  else if(photoresistorDetectionOn)
+  else if(state==PHOTO)
   {
     photoresistorModeOn();
   }
-  else if(pirDetectionOn)
+  else if(state==MOTION)
   {
-    // TODO
+    motionOn();
   }
-  else if(tvModeOn)
+  else if(state==TV)
   {
     playTvMode();
   }
@@ -56,34 +60,72 @@ void loop() {
   {
     lightsOff();
   }
-  
+  delay(500);
 
 }
 
 
 void serialEvent()
 {
-  //TODO handle incoming message
+  uint8_t counter=0;
+  while(Serial.available() && counter<10)
+  {
+    messageBuffer[counter]=Serial.read();
+    ++counter;
+  }
+  
+  handleRecivedMessage();
+}
+
+void handleRecivedMessage()
+{
+  if(messageBuffer[0]==1) state=NORMAL;
+  else if(messageBuffer[0]==2) state=PHOTO;
+  else if(messageBuffer[0]==3) state=MOTION;
+  else if(messageBuffer[0]==4) state=TV;
+
+  if((state==NORMAL)||(state==PHOTO)||(state==MOTION))
+  {
+    redLevel=messageBuffer[1];
+    greenLevel=messageBuffer[2];
+    blueLevel=messageBuffer[3];
+    brightnessLevel=messageBuffer[4];
+  }
+  if(state==PHOTO) criticalLightLevel=messageBuffer[5];
+}
+
+
+void lightsOn()
+{
+  analogWrite(redPin,redLevel*brightnessLevel);
+  analogWrite(greenPin,greenLevel*brightnessLevel);
+  analogWrite(bluePin,blueLevel*brightnessLevel);
+}
+
+
+void photoresistorModeOn()
+{
+  int lightLevel=analogRead(photoresistorPin);
+  lightLevel=map(lightLevel,0,1023,1,100);
+  if(lightLevel<criticalLightLevel) lightsOn();
+}
+
+
+void motionOn()
+{
+  if(digitalRead(pirPin)==LOW) lightsOn;
 }
 
 
 void playTvMode()
 {
-
+  brightnessLevel=100;
+  redLevel=random(0,256);
+  greenLevel=random(0,256);
+  blueLevel=random(0,256);
+  lightsOn();
 }
 
-void photoresistorModeOn()
-{
-  int lightLevel=analogRead(photoresistorPin);
-  if(lightLevel<criticalLightLevel) lightsOn();
-}
-
-void lightsOn()
-{
-  analogWrite(redPin,redLevel);
-  analogWrite(greenPin,greenLevel);
-  analogWrite(bluePin,blueLevel);
-}
 
 void lightsOff()
 {
