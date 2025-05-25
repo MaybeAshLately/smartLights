@@ -11,6 +11,9 @@ State state;
 int redLevel=0;
 int greenLevel=0;
 int blueLevel=0;
+int lastDetection=0;
+bool motionDetected=false;
+bool photoresistorOn=false;
 
 int criticalLightLevel=0;
 int brightnessLevel=0;
@@ -23,6 +26,7 @@ void lightsOn();
 void lightsOff();
 void handleRecivedMessage();
 void motionOn();
+void sendAck();
 
 void setup() {
   randomSeed(analogRead(A0));
@@ -31,9 +35,11 @@ void setup() {
   pinMode(bluePin,OUTPUT);
   pinMode(pirPin, INPUT);
 
-  digitalWrite(redPin,LOW);
-  digitalWrite(greenPin,LOW);
-  digitalWrite(bluePin,LOW);
+  digitalWrite(redPin,HIGH);
+  digitalWrite(greenPin,HIGH);
+  digitalWrite(bluePin,HIGH);
+
+  state=NONE;
 
   Serial.begin(9600);
 }
@@ -50,6 +56,7 @@ void loop() {
   }
   else if(state==MOTION)
   {
+    if(motionDetected==true) lastDetection++;
     motionOn();
   }
   else if(state==TV)
@@ -60,7 +67,7 @@ void loop() {
   {
     lightsOff();
   }
-  delay(500);
+  delay(100);
 
 }
 
@@ -92,14 +99,18 @@ void handleRecivedMessage()
     brightnessLevel=messageBuffer[4];
   }
   if(state==PHOTO) criticalLightLevel=messageBuffer[5];
+
+  if((state==PHOTO)||(state==MOTION)) lightsOff();
+
+  sendAck();
 }
 
 
 void lightsOn()
 {
-  analogWrite(redPin,redLevel*brightnessLevel);
-  analogWrite(greenPin,greenLevel*brightnessLevel);
-  analogWrite(bluePin,blueLevel*brightnessLevel);
+  analogWrite(redPin,255-((redLevel*brightnessLevel)/100));
+  analogWrite(greenPin,255-((greenLevel*brightnessLevel)/100));
+  analogWrite(bluePin,255-((blueLevel*brightnessLevel)/100));
 }
 
 
@@ -107,13 +118,32 @@ void photoresistorModeOn()
 {
   int lightLevel=analogRead(photoresistorPin);
   lightLevel=map(lightLevel,0,1023,1,100);
-  if(lightLevel<criticalLightLevel) lightsOn();
+
+  if(lightLevel<criticalLightLevel)
+  {
+    lightsOn();
+    photoresistorOn=true;
+  } 
+  else if(photoresistorOn==true)
+  {
+    lightsOff();
+  }
 }
 
 
 void motionOn()
 {
-  if(digitalRead(pirPin)==LOW) lightsOn;
+  if(lastDetection>50)
+  {
+    lightsOff();
+    lastDetection=0;
+    motionDetected=false;
+  } 
+  else if(digitalRead(pirPin)==HIGH)
+  {
+    motionDetected=true;
+    lightsOn();
+  } 
 }
 
 
@@ -129,7 +159,14 @@ void playTvMode()
 
 void lightsOff()
 {
-  digitalWrite(redPin,LOW);
-  digitalWrite(greenPin,LOW);
-  digitalWrite(bluePin,LOW);
+  digitalWrite(redPin,HIGH);
+  digitalWrite(greenPin,HIGH);
+  digitalWrite(bluePin,HIGH);
+}
+
+
+void sendAck()
+{
+  Serial.write(1);
+  Serial.flush();
 }
